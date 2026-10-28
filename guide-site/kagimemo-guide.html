@@ -385,7 +385,7 @@ function trashFile(id) {
 
   <div class="codebox" id="code-index">
     <div class="codehead">
-      <div class="left"><span class="fn">index.html</span><span class="meta">画面と暗号処理 ・ 1199 行</span></div>
+      <div class="left"><span class="fn">index.html</span><span class="meta">画面と暗号処理 ・ 1212 行</span></div>
       <div class="btns">
         <button type="button" class="expand" aria-controls="pre-index">全体を表示</button>
         <button type="button" class="copy" data-target="pre-index">コピー</button>
@@ -398,7 +398,7 @@ function trashFile(id) {
 &lt;base target="_top"&gt;
 &lt;title&gt;鍵メモ&lt;/title&gt;
 &lt;!--
-  鍵メモ（Google Apps Script版）画面側  v2
+  鍵メモ（Google Apps Script版）画面側  v2.1
 
   ■ 直接リンク
     ウェブアプリのURLに ?id=&lt;ドライブのファイルID&gt; を付けて開くと、一覧を経由せずに
@@ -496,12 +496,19 @@ h1 { margin: 0; font-size: 17px; text-wrap: balance; }
 .listhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .listhead h2 { margin: 0; font-size: 12px; color: var(--muted); letter-spacing: .08em; font-weight: 600; }
 .files { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.frow { display: flex; border-bottom: 1px solid var(--line); }
+.frow:last-child { border-bottom: 0; }
 .file {
+  flex: 1; min-width: 0;
   display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; align-items: center;
-  text-align: left; border: 0; border-radius: 0; border-bottom: 1px solid var(--line);
-  padding: 12px 14px; background: transparent; white-space: normal;
+  text-align: left; border: 0; border-radius: 0;
+  padding: 12px 10px 12px 14px; background: transparent; white-space: normal;
 }
-.file:last-child { border-bottom: 0; }
+.lnk {
+  flex: none; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: transparent;
+  color: var(--accent); font-size: 12.5px; font-weight: 600; padding: 0 12px;
+}
+.lnk:active { background: var(--bg); }
 .file:active { background: var(--bg); }
 .file .n { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
 .file .d { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; line-height: 1.4; }
@@ -716,7 +723,7 @@ footer {
 
 &lt;footer class="gutter"&gt;
   &lt;span id="count"&gt;&amp;nbsp;&lt;/span&gt;
-  &lt;span&gt;AES-256-GCM ・ 5分離れると自動ロック&lt;/span&gt;
+  &lt;span&gt;v2.1 ・ AES-256-GCM ・ 5分離れると自動ロック&lt;/span&gt;
 &lt;/footer&gt;
 
 &lt;div id="toast" hidden role="status"&gt;&lt;/div&gt;
@@ -1079,7 +1086,13 @@ const KB = (() =&gt; {
         d.style.whiteSpace = 'pre';
         b.append(k, n, d);
         b.addEventListener('click', () =&gt; info.bin ? openBinary(f) : openText(f.id));
-        box.appendChild(b);
+        const l = document.createElement('button');
+        l.className = 'lnk'; l.type = 'button'; l.textContent = 'リンク';
+        l.setAttribute('aria-label', info.name + ' のリンク');
+        l.addEventListener('click', () =&gt; showLink(f.id));
+        const row = document.createElement('div'); row.className = 'frow';
+        row.append(b, l);
+        box.appendChild(row);
       }
     } catch (e) {
       box.innerHTML = '';
@@ -1601,7 +1614,7 @@ const KB = (() =&gt; {
     <li><b>新規メモ</b>：ファイル名とパスワードを決めて本文を書き、「保存」を押すとドライブにファイルができます。</li>
     <li><b>写真・ファイルを追加</b>：写真、動画、PDFなど、どんな拡張子のファイルでも選べます（複数可）。暗号化してから送るので、ドライブには中身の読めない .kgm ファイルとして保存されます。「ドライブ上のファイル名も隠す」にチェックすると、ドライブでのファイル名も「kgm-xxxx.kgm」になり、元の名前は開いたときだけ表示されます。</li>
     <li><b>開く</b>：一覧のファイルをタップしてパスワードを入れます。画像・動画・音声・テキストはその場で表示され、それ以外のファイルは「端末に保存」で取り出せます。</li>
-    <li><b>直接リンク</b>：ファイルを開いて「リンク」を押すと、そのファイル専用のURL（ウェブアプリのURLの末尾に <code>?id=ファイルID</code> が付いたもの）が表示されます。このURLを開くと一覧を経由せずにパスワード入力になり、そのまま編集画面や表示画面に進みます。ブックマークやホーム画面に追加しておくと便利です。リンクを開けるのは自分のGoogleアカウントだけです。</li>
+    <li><b>直接リンク</b>：一覧の各ファイルの右端、またはファイルを開いたときの上部にある「リンク」を押すと、そのファイル専用のURL（ウェブアプリのURLの末尾に <code>?id=ファイルID</code> が付いたもの）が表示されます。このURLを開くと一覧を経由せずにパスワード入力になり、そのまま編集画面や表示画面に進みます。ブックマークやホーム画面に追加しておくと便利です。リンクを開けるのは自分のGoogleアカウントだけです。</li>
     <li><b>パスワードの記憶</b>：一度入力したパスワードは「ロック」するまで覚えておき、同じパスワードのファイルは入力なしで開けます。</li>
     <li><b>保存（メモ）</b>：暗号化した内容で、ドライブ上のファイルを直接上書きします。開いたあとに別の端末で同じメモが更新されていた場合は、上書きしてよいか確認が出ます。</li>
     <li><b>削除</b>：ドライブのゴミ箱に移動します。30日以内ならドライブから元に戻せます。</li>
@@ -1669,7 +1682,7 @@ const KB = (() =&gt; {
 </section>
 
 <footer class="end">
-  <span>鍵メモ ・ Google Apps Script 版 v2</span>
+  <span>鍵メモ ・ Google Apps Script 版 v2.1</span>
   <span>開発元：<a href="https://usepocket.com" target="_blank" rel="noopener">usePocket</a></span>
 </footer>
 
