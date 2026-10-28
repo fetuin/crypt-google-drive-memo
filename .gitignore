@@ -1,5 +1,7 @@
 # カウンターの記録データ（サーバー上でのみ生成）
 guide-site/counter_data/*.dat
+# 管理画面のパスワード（サーバー上でのみ作成）
+guide-site/counter_data/admin_password.txt
 
 # OSが作るファイル
 .DS_Store

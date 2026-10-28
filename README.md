@@ -18,7 +18,7 @@
 | `gas/Code.gs` | Apps Script のサーバー側コード |
 | `gas/index.html` | 画面（暗号化・復号もここで実行） |
 | `guide-site/kagimemo-guide.html` | 公開用セットアップガイド |
-| `guide-site/counter.cgi` | ガイドページ用アクセスカウンター（Perl CGI） |
+| `guide-site/counter.cgi` | アクセスカウンター（Perl CGI、複数ページ対応・管理画面つき） |
 | `guide-site/counter_data/.htaccess` | カウンターデータを外から読めなくする設定 |
 
 ## 反映方法
@@ -27,7 +27,15 @@
   - デプロイ設定: 種類「ウェブアプリ」／実行ユーザー「自分」／アクセス「自分のみ」
 - **ガイドサイト**: `guide-site/` の中身をサーバーにアップロードします。`counter.cgi` は 755、`counter_data` は 755（書き込めなければ 707 か 777）。
 
+## アクセスカウンターの管理画面
+
+`counter.cgi?mode=admin` を開くと、全ページの合計・今日・昨日・今月・先月の一覧と、ページごとの月別・日別の記録を見られます。
+
+- 使うには、サーバーの `counter_data/` に `admin_password.txt` を作り、1行目に管理用パスワードを書きます（このファイルはリポジトリに入れません）。
+- ログインは12時間有効です。パスワードを間違えると2秒待たされます。
+- 日別の記録は、この機能を入れた日から始まります。それ以前は合計数だけが残っています。
+
 ## 注意
 
 - `counter.cgi` の `$HASH_SALT` はリポジトリでは初期値のままです。サーバーに置くものは任意の文字列に変えてください。
-- カウンターの記録データ（`counter_data/*.dat`）はリポジトリに入れません。
+- カウンターの記録データ（`counter_data/*.dat`）と管理用パスワード（`counter_data/admin_password.txt`）はリポジトリに入れません。
