@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>鍵メモ セットアップガイド</title>
+<meta name="description" content="Googleドライブ上のメモ・写真・動画・任意のファイルを、スマホからパスワード付きで暗号化して保存・閲覧できるGoogle Apps Scriptウェブアプリ「鍵メモ」の導入手順とソースコード。">
+<style>
+/* レイアウト: 1カラムの読み物。手順は番号つき、コードはコピー用ボタンつきの枠 */
+:root {
+  --bg: #f3f6f4;
+  --surface: #ffffff;
+  --fg: #1b2420;
+  --muted: #5a6761;
+  --line: #d5ddd8;
+  --accent: #1d6b58;
+  --accent-soft: #e1eee9;
+  --accent-fg: #ffffff;
+  --warn: #9c4419;
+  --warn-soft: #f8ece4;
+  --code-bg: #f7f9f8;
+  --font-ui: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "BIZ UDPGothic", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas, "BIZ UDGothic", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111715; --surface: #18201d; --fg: #e1e8e4; --muted: #96a59e; --line: #2c3733;
+    --accent: #5cbca0; --accent-soft: #1d2f29; --accent-fg: #0b1512;
+    --warn: #e3905f; --warn-soft: #2e2119; --code-bg: #141b18;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.85 var(--font-ui);
+  -webkit-text-size-adjust: 100%;
+}
+.wrap {
+  max-width: 760px; margin: 0 auto;
+  padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 44px;
+}
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { line-height: 1.4; text-wrap: balance; margin: 0; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 16px; }
+section > h2 {
+  font-size: 21px; padding-bottom: 8px; border-bottom: 2px solid var(--line);
+  display: flex; align-items: center; gap: 10px;
+}
+h3 { font-size: 16.5px; }
+ul { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--accent-soft); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+b { font-weight: 700; }
+
+/* ヘッダー */
+.hero { display: flex; flex-direction: column; gap: 14px; }
+.mark { display: flex; align-items: center; gap: 10px; color: var(--accent); font-weight: 700; letter-spacing: .08em; font-size: 13px; }
+.mark svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.hero h1 { font-size: clamp(26px, 6vw, 34px); letter-spacing: .02em; }
+.hero p { color: var(--muted); max-width: 40em; }
+.toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.toc a {
+  font-size: 13.5px; text-decoration: none; color: var(--fg);
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px;
+}
+.toc a:hover { border-color: var(--accent); }
+
+/* 仕組み図 */
+.flow {
+  display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+}
+.node { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 8px; background: var(--bg); min-width: 0; }
+.node .t { font-weight: 700; font-size: 14.5px; }
+.node .s { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.node.key { background: var(--accent-soft); }
+.arrow { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.4; }
+.arrow svg { width: 26px; height: 14px; fill: none; stroke: var(--muted); stroke-width: 1.6; }
+@media (max-width: 600px) {
+  .flow { grid-template-columns: 1fr; }
+  .arrow { flex-direction: row; gap: 6px; }
+  .arrow svg { transform: rotate(90deg); }
+}
+
+/* 手順 */
+.steps { list-style: none; padding: 0; margin: 0; counter-reset: step; display: flex; flex-direction: column; gap: 0; }
+.steps > li {
+  counter-increment: step; position: relative;
+  padding: 0 0 22px 46px; display: flex; flex-direction: column; gap: 8px;
+}
+.steps > li::before {
+  content: counter(step); position: absolute; left: 0; top: 0;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-fg);
+  font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+.steps > li:not(:last-child)::after {
+  content: ""; position: absolute; left: 14px; top: 34px; bottom: 4px; width: 2px; background: var(--line);
+}
+.steps > li > h3 { padding-top: 2px; }
+.setting {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 14.5px;
+}
+.setting dt { color: var(--muted); }
+.setting dd { margin: 0; font-weight: 700; }
+
+/* 注記 */
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: 14.5px; display: flex; flex-direction: column; gap: 6px; }
+.note.warn { background: var(--warn-soft); border-color: transparent; }
+.note .h { font-weight: 700; font-size: 13.5px; }
+.note.warn .h { color: var(--warn); }
+
+/* コード */
+.codebox { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.codehead {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap;
+  padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--line);
+}
+.codehead .fn { font-family: var(--font-mono); font-weight: 700; font-size: 14.5px; }
+.codehead .meta { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.codehead .left { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.btns { display: flex; gap: 6px; }
+button {
+  font: inherit; font-size: 13.5px; cursor: pointer; border-radius: 8px; padding: 6px 14px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg); white-space: nowrap;
+}
+button.copy { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 700; min-width: 96px; }
+button:hover { border-color: var(--accent); }
+pre {
+  margin: 0; padding: 14px 16px; background: var(--code-bg); overflow: auto;
+  max-height: 340px; font: 12.5px/1.6 var(--font-mono); tab-size: 2;
+}
+.codebox.open pre { max-height: none; }
+
+footer.end {
+  font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px;
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px;
+}
+.dev { font-size: 13.5px; color: var(--muted); }
+
+/* アクセスカウンター（最上部の帯） */
+.counter {
+  display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px 16px;
+  font-size: 12.5px; color: var(--muted); background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-block: 6px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  font-variant-numeric: tabular-nums;
+}
+.counter b { color: var(--fg); font-weight: 700; margin-left: 4px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+</style>
+</head>
+<body>
+<!-- アクセスカウンター: data-src にカウンターCGIの場所、data-page にこのページのタグを書く -->
+<div class="counter" id="access-counter" data-src="counter.cgi" data-page="kagimemo-guide" aria-label="アクセス数">
+  <span>アクセス<b data-k="total">–</b></span>
+  <span>今日<b data-k="today">–</b></span>
+  <span>昨日<b data-k="yesterday">–</b></span>
+</div>
+<div class="wrap">
+
+<header class="hero">
+  <div class="mark">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2.5"/></svg>
+    KAGIMEMO
+  </div>
+  <h1>鍵メモ セットアップガイド</h1>
+  <p>Googleドライブに置いたメモ・写真・動画・任意のファイルを、スマホからパスワード付きで暗号化して保存・閲覧するための小さなウェブアプリです。Google Apps Scriptで動くので、自分のサーバーやGoogle Cloudの設定は要りません。下のコード2つをコピーして貼り付ければ、10分ほどで使えるようになります。</p>
+  <p class="dev">開発元：<a href="https://usepocket.com" target="_blank" rel="noopener">usePocket（usepocket.com）</a></p>
+  <nav class="toc" aria-label="目次">
+    <a href="#how">仕組み</a>
+    <a href="#setup">セットアップ</a>
+    <a href="#code">コード</a>
+    <a href="#use">使い方</a>
+    <a href="#size">ファイルサイズ</a>
+    <a href="#caution">注意点</a>
+    <a href="#format">ファイル形式</a>
+  </nav>
+</header>
+
+<section id="how">
+  <h2>仕組み</h2>
+  <div class="flow" role="img" aria-label="スマホのブラウザで暗号化し、Apps Scriptを経由して暗号文だけをGoogleドライブに保存する流れ">
+    <div class="node key">
+      <span class="t">スマホのブラウザ</span>
+      <span class="s">パスワードから鍵を作り、ここで暗号化と復号を行う</span>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 26 14" aria-hidden="true"><path d="M1 7h22M17 2l6 5-6 5"/></svg>暗号文だけ</div>
+    <div class="node">
+      <span class="t">Apps Script</span>
+      <span class="s">自分のアカウントで動く中継役。一覧・メモの読み書きと、写真・動画用のアクセス許可を担当</span>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 26 14" aria-hidden="true"><path d="M1 7h22M17 2l6 5-6 5"/></svg>読み書き</div>
+    <div class="node">
+      <span class="t">Googleドライブ</span>
+      <span class="s">マイドライブの「鍵メモ」フォルダに、メモは .txt、写真・動画などは .kgm で保存</span>
+    </div>
+  </div>
+  <ul>
+    <li>暗号方式は <b>AES-256-GCM</b>、パスワードから鍵を作る処理は <b>PBKDF2-SHA256 を60万回</b>。どちらもブラウザ標準の Web Crypto API を使っています。</li>
+    <li>パスワードと平文はブラウザの外に出ません。Apps Script とドライブに届くのは暗号化された文字列だけです。</li>
+    <li>パスワードが違うときや、ファイルが書き換えられているときは開けません（改ざん検出つき）。</li>
+    <li>写真・動画などは、Apps Script の容量制限を避けるため、ブラウザから Google ドライブへ直接送受信します。4MBずつ暗号化しながら送るので、大きなファイルでも端末のメモリをほとんど使いません。</li>
+  </ul>
+</section>
+
+<section id="setup">
+  <h2>セットアップ</h2>
+  <p>貼り付け作業があるので、PCで行うのがおすすめです。</p>
+  <ol class="steps">
+    <li>
+      <h3>Apps Script のプロジェクトを作る</h3>
+      <p><a href="https://script.google.com/" target="_blank" rel="noopener">script.google.com</a> を開き、「新しいプロジェクト」を作ります。左上の「無題のプロジェクト」をクリックして「鍵メモ」などの名前にしておくと、あとで見つけやすくなります。</p>
+    </li>
+    <li>
+      <h3>Code.gs を貼り付ける</h3>
+      <p>最初からある「コード.gs」の中身をすべて消して、下の <a href="#code-gs">Code.gs</a> を貼り付けます。</p>
+    </li>
+    <li>
+      <h3>index.html を追加して貼り付ける</h3>
+      <p>ファイル一覧の「＋」→「HTML」を選び、名前を <code>index</code> にします（.html は自動で付きます）。中身をすべて消して、下の <a href="#code-index">index.html</a> を貼り付けます。最後に保存（Ctrl+S）します。</p>
+    </li>
+    <li>
+      <h3>ウェブアプリとしてデプロイする</h3>
+      <p>右上の「デプロイ」→「新しいデプロイ」を開き、歯車アイコンから種類「ウェブアプリ」を選んで、次のように設定します。</p>
+      <dl class="setting">
+        <dt>次のユーザーとして実行</dt><dd>自分</dd>
+        <dt>アクセスできるユーザー</dt><dd>自分のみ</dd>
+      </dl>
+    </li>
+    <li>
+      <h3>アクセスを承認する</h3>
+      <p>「アクセスを承認」を押してアカウントを選びます。「このアプリは Google で確認されていません」と出たら、「詳細」→「鍵メモ（安全ではないページ）に移動」→「許可」と進みます。自分で作ったスクリプトなので問題ありません。</p>
+    </li>
+    <li>
+      <h3>スマホで開いてホーム画面に追加する</h3>
+      <p>デプロイ完了画面に出る「ウェブアプリ」のURL（<code>https://script.google.com/macros/s/…/exec</code>）をスマホで開きます。ブラウザのメニューから「ホーム画面に追加」しておくと、アプリのように起動できます。</p>
+    </li>
+  </ol>
+</section>
+
+<section id="code">
+  <h2>コード</h2>
+  <p>「コピー」を押すと全文がクリップボードに入ります。そのまま Apps Script のエディタに貼り付けてください。前のバージョンを使っている場合も、2つとも全文を置き換えてから「新バージョン」でデプロイし直せば、これまでのメモはそのまま使えます。</p>
+
+  <div class="codebox" id="code-gs">
+    <div class="codehead">
+      <div class="left"><span class="fn">Code.gs</span><span class="meta">サーバー側 ・ 116 行</span></div>
+      <div class="btns">
+        <button type="button" class="expand" aria-controls="pre-gs">全体を表示</button>
+        <button type="button" class="copy" data-target="pre-gs">コピー</button>
+      </div>
+    </div>
+    <pre id="pre-gs" tabindex="0"><code>/**
+ * 鍵メモ（Google Apps Script版）サーバー側  v2
+ *
+ * - マイドライブの「鍵メモ」フォルダ内のファイルを一覧・読み書きします。
+ * - 暗号化と復号はすべてブラウザ側で行い、ここには暗号文しか届きません。
+ * - 画像・動画などのファイルは、ブラウザからDrive APIへ直接アップロード／ダウンロードします
+ *   （Apps Scriptの容量制限を受けないようにするため）。そのためのアクセストークンを渡します。
+ * - URL末尾に ?id=&lt;ファイルID&gt; を付けると、そのファイルを直接開きます。
+ * - デプロイ設定: 種類「ウェブアプリ」/ 実行ユーザー「自分」/ アクセス「自分のみ」
+ */
+
+const FOLDER_NAME = '鍵メモ';
+const MAGIC = '#kagimemo v1 ';
+
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('鍵メモ')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
+}
+
+function getFolder_() {
+  const it = DriveApp.getFoldersByName(FOLDER_NAME);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(FOLDER_NAME);
+}
+
+// ファイル内容のハッシュ。ほかの端末での更新（競合）検出に使う
+function rev_(s) {
+  return Utilities.base64Encode(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8));
+}
+
+function listFiles() {
+  const files = getFolder_().getFiles();
+  const out = [];
+  while (files.hasNext()) {
+    const f = files.next();
+    if (f.isTrashed()) continue;
+    out.push({ id: f.getId(), name: f.getName(), updated: f.getLastUpdated().getTime(), size: f.getSize() });
+  }
+  out.sort((a, b) =&gt; b.updated - a.updated);
+  return out;
+}
+
+/**
+ * ブラウザからDrive APIを直接呼ぶための情報。
+ * トークンは約1時間有効で、このウェブアプリを開いた本人の権限でのみ発行されます。
+ */
+function getDriveAccess() {
+  return { token: ScriptApp.getOAuthToken(), folderId: getFolder_().getId() };
+}
+
+// ---------- テキストメモ（v1形式） ----------
+
+function readFile(id) {
+  const f = getOwnFile_(id);
+  const content = f.getBlob().getDataAsString('UTF-8');
+  return { id: f.getId(), name: f.getName(), content: content, rev: rev_(content) };
+}
+
+/**
+ * req = { id?, name?, content, rev?, force? }
+ *  id あり: 上書き保存（rev が現在の内容と違えば CONFLICT。force で強制上書き）
+ *  id なし: 「鍵メモ」フォルダに新規作成
+ */
+function saveFile(req) {
+  const content = String(req.content || '');
+  if (content.indexOf(MAGIC) !== 0) throw new Error('暗号化されていないデータは保存できません。');
+
+  if (req.id) {
+    const f = getOwnFile_(req.id);
+    if (!req.force &amp;&amp; req.rev &amp;&amp; rev_(f.getBlob().getDataAsString('UTF-8')) !== req.rev) {
+      throw new Error('CONFLICT');
+    }
+    f.setContent(content);
+    return { id: f.getId(), name: f.getName(), rev: rev_(content) };
+  }
+
+  let name = String(req.name || '').trim();
+  if (!name) throw new Error('ファイル名を入力してください。');
+  if (name.length &gt; 100) throw new Error('ファイル名が長すぎます。');
+  if (!/\.txt$/i.test(name)) name += '.txt';
+  const folder = getFolder_();
+  if (folder.getFilesByName(name).hasNext()) throw new Error('「' + name + '」はすでにあります。別の名前にしてください。');
+  const f = folder.createFile(name, content, MimeType.PLAIN_TEXT);
+  return { id: f.getId(), name: f.getName(), rev: rev_(content) };
+}
+
+// ---------- 共通 ----------
+
+// 「鍵メモ」フォルダ内のファイルだけを扱う
+function getOwnFile_(id) {
+  let f;
+  try { f = DriveApp.getFileById(String(id || '')); } catch (e) { throw new Error('ファイルが見つかりません。'); }
+  const parents = f.getParents();
+  const folderId = getFolder_().getId();
+  while (parents.hasNext()) if (parents.next().getId() === folderId) return f;
+  throw new Error('「鍵メモ」フォルダのファイルではありません。');
+}
+
+// URL（?id=…）で直接開くときのファイル情報
+function getFileInfo(id) {
+  const f = getOwnFile_(id);
+  if (f.isTrashed()) throw new Error('このファイルはゴミ箱に移動されています。');
+  return { id: f.getId(), name: f.getName(), updated: f.getLastUpdated().getTime(), size: f.getSize() };
+}
+
+// このウェブアプリのURL（ファイルごとのリンク作成用）
+function getAppUrl() {
+  return ScriptApp.getService().getUrl();
+}
+
+// ゴミ箱へ移動（ドライブのゴミ箱から30日以内なら元に戻せます）
+function trashFile(id) {
+  getOwnFile_(id).setTrashed(true);
+  return true;
+}
+</code></pre>
+  </div>
+
+  <div class="codebox" id="code-index">
+    <div class="codehead">
+      <div class="left"><span class="fn">index.html</span><span class="meta">画面と暗号処理 ・ 1199 行</span></div>
+      <div class="btns">
+        <button type="button" class="expand" aria-controls="pre-index">全体を表示</button>
+        <button type="button" class="copy" data-target="pre-index">コピー</button>
+      </div>
+    </div>
+    <pre id="pre-index" tabindex="0"><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="ja"&gt;
+&lt;head&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;base target="_top"&gt;
+&lt;title&gt;鍵メモ&lt;/title&gt;
+&lt;!--
+  鍵メモ（Google Apps Script版）画面側  v2
+
+  ■ 直接リンク
+    ウェブアプリのURLに ?id=&lt;ドライブのファイルID&gt; を付けて開くと、一覧を経由せずに
+    そのファイルのパスワード入力 → 編集画面／表示画面に進みます。
+    ファイルを開いている間は、アドレスバーのURLもそのファイルのリンクに切り替わります。
+
+  ■ テキストメモ（.txt）  ※PC用 kagimemo.html と共通の形式
+    1行目: #kagimemo v1 pbkdf2-sha256 &lt;反復回数&gt; aes-256-gcm
+    2行目以降: Base64( salt[16] || iv[12] || 暗号文+認証タグ )
+
+  ■ 画像・動画・任意のファイル（.kgm）  バイナリ・分割暗号化
+    "KGMB" | ver(1byte)=1 | ヘッダ長(u32 BE) | ヘッダJSON
+        {"kdf":"pbkdf2-sha256","iter":600000,"salt":b64(16),"cipher":"aes-256-gcm","chunk":4194304,"nonce":b64(8)}
+    | メタ暗号文長(u32 BE) | メタ暗号文   … {"name","type","size","mtime"} をJSONで暗号化
+    | 本体チャンク暗号文 × n               … 平文を chunk バイトずつ区切って暗号化（各+16byteのタグ）
+    鍵   : PBKDF2-SHA256(パスワード, salt, iter) → AES-256-GCM
+    IV   : nonce(8) || u32(チャンク番号)   メタは u32 = 0xFFFFFFFF
+    AAD  : 先頭からヘッダJSONまでのバイト列 || u32(チャンク番号) || 最終チャンクなら1、それ以外0
+           メタは 先頭からヘッダJSONまで || "meta"
+--&gt;
+&lt;style&gt;
+/* レイアウト: 上部バー + 一覧／エディタ／ビューア。スマホ優先 */
+:root {
+  --bg: #eef2f0;
+  --surface: #ffffff;
+  --fg: #1b2420;
+  --muted: #5d6a64;
+  --line: #d3dcd7;
+  --accent: #1d6b58;
+  --accent-soft: #dcebe5;
+  --accent-fg: #ffffff;
+  --warn: #9c4419;
+  --warn-soft: #f6e9e1;
+  --ok: #2c7a3f;
+  --font-ui: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  --font-text: "BIZ UDGothic", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Roboto Mono", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111715; --surface: #19211e; --fg: #e1e8e4; --muted: #94a39c; --line: #2b3632;
+    --accent: #5cbca0; --accent-soft: #1d2f29; --accent-fg: #0b1512;
+    --warn: #e3905f; --warn-soft: #2e2119; --ok: #77c98a; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 var(--font-ui);
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  -webkit-text-size-adjust: 100%;
+}
+[hidden] { display: none !important; }
+button, input { font: inherit; color: inherit; }
+button {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 8px 12px; cursor: pointer; white-space: nowrap; touch-action: manipulation;
+}
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+button.quiet { border-color: transparent; background: transparent; color: var(--muted); padding-inline: 8px; }
+button.danger { color: var(--warn); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gutter {
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+header {
+  display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap;
+  padding-block: 8px; border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.brand { font-weight: 700; letter-spacing: .04em; display: flex; align-items: center; gap: 6px; }
+.brand svg { width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-width: 2; }
+.fileinfo { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 1 1 120px; }
+.fname { font-family: var(--font-mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.status { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.status.dirty { color: var(--warn); }
+.status.saved { color: var(--ok); }
+.tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.scroll { flex: 1; overflow-y: auto; padding-block: 20px 32px; }
+.stack { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+h1 { margin: 0; font-size: 17px; text-wrap: balance; }
+.lead { margin: 0; color: var(--muted); font-size: 13.5px; }
+.listhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.listhead h2 { margin: 0; font-size: 12px; color: var(--muted); letter-spacing: .08em; font-weight: 600; }
+.files { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.file {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; align-items: center;
+  text-align: left; border: 0; border-radius: 0; border-bottom: 1px solid var(--line);
+  padding: 12px 14px; background: transparent; white-space: normal;
+}
+.file:last-child { border-bottom: 0; }
+.file:active { background: var(--bg); }
+.file .n { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.file .d { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; line-height: 1.4; }
+.kind {
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; border-radius: 6px; padding: 2px 0;
+  width: 4.6em; text-align: center; background: var(--bg); color: var(--muted);
+}
+.kind.memo { background: var(--accent-soft); color: var(--accent); }
+.kind.image, .kind.video, .kind.audio { background: var(--warn-soft); color: var(--warn); }
+.empty { padding: 18px 16px; color: var(--muted); font-size: 13.5px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 12px; color: var(--muted); letter-spacing: .03em; }
+.field input {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 8px;
+  padding: 10px 12px; width: 100%; font-size: 16px; /* iOSの自動ズーム防止 */
+}
+.check { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer; }
+.check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+.check small { display: block; color: var(--muted); font-size: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row &gt; button { flex: 1 1 auto; padding-block: 10px; }
+.err { color: var(--warn); font-size: 13px; min-height: 1.2em; overflow-wrap: anywhere; }
+.warnbox { background: var(--warn-soft); color: var(--fg); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.chosen { font-family: var(--font-mono); font-size: 13px; background: var(--bg); border-radius: 8px; padding: 8px 12px; overflow-wrap: anywhere; }
+
+/* アップロード */
+.queue { display: flex; flex-direction: column; gap: 10px; }
+.qitem { display: flex; flex-direction: column; gap: 4px; }
+.qtop { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.qtop .qn { overflow-wrap: anywhere; min-width: 0; }
+.qtop .qs { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.qitem.done .qs { color: var(--ok); }
+.qitem.fail .qs { color: var(--warn); }
+.bar { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; }
+.bar &gt; i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.total { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ビューア */
+.viewer { flex: 1; overflow: auto; display: flex; flex-direction: column; align-items: center; gap: 12px; padding-block: 16px 24px; }
+.viewer .media { width: 100%; max-width: 900px; display: flex; justify-content: center; }
+.viewer img, .viewer video { max-width: 100%; max-height: 72vh; border-radius: 6px; background: #000; }
+.viewer img { background: transparent; }
+.viewer audio { width: 100%; max-width: 560px; }
+.viewer pre {
+  width: 100%; max-width: 900px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px;
+  font: 14px/1.7 var(--font-text);
+}
+.vmeta { font-size: 12.5px; color: var(--muted); text-align: center; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.vprog { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 8px; margin-top: 10vh; text-align: center; font-size: 13.5px; color: var(--muted); }
+
+#editor {
+  flex: 1; width: 100%; resize: none; border: 0; outline: none;
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.8 var(--font-text);
+  padding-block: 14px;
+}
+footer {
+  display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+  padding-block: 6px; border-top: 1px solid var(--line); background: var(--surface);
+}
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+  background: var(--fg); color: var(--bg); padding: 9px 14px; border-radius: 8px; font-size: 13px;
+  max-width: calc(100% - 32px); z-index: 20;
+}
+.overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 30;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.dialog { background: var(--surface); border-radius: 12px; padding: 20px; max-width: 360px; width: 100%; display: flex; flex-direction: column; gap: 16px; }
+.dialog p { margin: 0; overflow-wrap: anywhere; }
+#linkUrl {
+  width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px;
+  padding: 10px 12px; font: 14px var(--font-mono);
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;header class="gutter"&gt;
+  &lt;div class="brand"&gt;
+    &lt;svg viewBox="0 0 24 24" aria-hidden="true"&gt;&lt;rect x="4" y="10" width="16" height="11" rx="2"/&gt;&lt;path d="M8 10V7a4 4 0 0 1 8 0v3"/&gt;&lt;/svg&gt;
+    鍵メモ
+  &lt;/div&gt;
+  &lt;div class="fileinfo"&gt;
+    &lt;span class="chip" id="chipUnlocked" hidden&gt;解錠中&lt;/span&gt;
+    &lt;span class="fname" id="fname"&gt;&lt;/span&gt;
+    &lt;span class="status" id="status"&gt;&lt;/span&gt;
+  &lt;/div&gt;
+  &lt;div class="tools" id="toolsEditor" hidden&gt;
+    &lt;button id="btnSave" class="primary"&gt;保存&lt;/button&gt;
+    &lt;button id="btnEditorClose"&gt;閉じる&lt;/button&gt;
+    &lt;button id="btnEditorLink"&gt;リンク&lt;/button&gt;
+    &lt;button id="btnPw"&gt;パスワード変更&lt;/button&gt;
+    &lt;button id="btnEditorTrash" class="danger"&gt;削除&lt;/button&gt;
+  &lt;/div&gt;
+  &lt;div class="tools" id="toolsViewer" hidden&gt;
+    &lt;button id="btnDownload" class="primary"&gt;端末に保存&lt;/button&gt;
+    &lt;button id="btnViewerClose"&gt;閉じる&lt;/button&gt;
+    &lt;button id="btnViewerLink"&gt;リンク&lt;/button&gt;
+    &lt;button id="btnViewerTrash" class="danger"&gt;削除&lt;/button&gt;
+  &lt;/div&gt;
+  &lt;button id="btnLock" hidden&gt;ロック&lt;/button&gt;
+&lt;/header&gt;
+
+&lt;main&gt;
+  &lt;!-- 一覧 --&gt;
+  &lt;div class="scroll gutter" id="viewStart"&gt;
+    &lt;div class="stack"&gt;
+      &lt;div class="listhead"&gt;
+        &lt;h2&gt;マイドライブ ／ 鍵メモ&lt;/h2&gt;
+        &lt;button class="quiet" id="btnReload"&gt;再読み込み&lt;/button&gt;
+      &lt;/div&gt;
+      &lt;div class="files" id="files"&gt;&lt;div class="empty"&gt;読み込み中…&lt;/div&gt;&lt;/div&gt;
+      &lt;div class="err" id="startErr"&gt;&lt;/div&gt;
+      &lt;div class="row"&gt;
+        &lt;button class="primary" id="btnNew"&gt;新規メモ&lt;/button&gt;
+        &lt;button class="primary" id="btnAddFiles"&gt;写真・ファイルを追加&lt;/button&gt;
+      &lt;/div&gt;
+      &lt;p class="lead"&gt;暗号化と復号はこの画面の中だけで行われ、ドライブには暗号化されたデータだけが保存されます。&lt;/p&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;!-- 解錠 --&gt;
+  &lt;div class="scroll gutter" id="viewUnlock" hidden&gt;
+    &lt;form class="stack panel" id="formUnlock" autocomplete="off"&gt;
+      &lt;h1&gt;パスワードを入力&lt;/h1&gt;
+      &lt;div class="chosen" id="unlockName"&gt;&lt;/div&gt;
+      &lt;div class="field"&gt;
+        &lt;label for="pwUnlock"&gt;パスワード&lt;/label&gt;
+        &lt;input type="password" id="pwUnlock" autocomplete="current-password" required&gt;
+      &lt;/div&gt;
+      &lt;div class="err" id="unlockErr"&gt;&lt;/div&gt;
+      &lt;div class="row"&gt;
+        &lt;button type="submit" class="primary" id="btnUnlock"&gt;開く&lt;/button&gt;
+        &lt;button type="button" id="btnUnlockBack"&gt;一覧に戻る&lt;/button&gt;
+      &lt;/div&gt;
+      &lt;p class="lead"&gt;入力したパスワードは「ロック」するまで覚えておき、同じパスワードのファイルは入力なしで開けます。&lt;/p&gt;
+    &lt;/form&gt;
+  &lt;/div&gt;
+
+  &lt;!-- 新規メモ / パスワード変更 --&gt;
+  &lt;div class="scroll gutter" id="viewSetPw" hidden&gt;
+    &lt;form class="stack panel" id="formSetPw" autocomplete="off"&gt;
+      &lt;h1 id="setPwTitle"&gt;新しいメモ&lt;/h1&gt;
+      &lt;div class="field" id="nameField"&gt;
+        &lt;label for="newName"&gt;ファイル名&lt;/label&gt;
+        &lt;input type="text" id="newName" value="メモ.enc.txt" autocapitalize="off" autocorrect="off" spellcheck="false"&gt;
+      &lt;/div&gt;
+      &lt;label class="check" id="useSessionRow"&gt;&lt;input type="checkbox" id="useSession" checked&gt;&lt;span&gt;解錠中のパスワードを使う&lt;/span&gt;&lt;/label&gt;
+      &lt;div class="field pwf"&gt;
+        &lt;label for="pwNew1"&gt;パスワード&lt;/label&gt;
+        &lt;input type="password" id="pwNew1" autocomplete="new-password"&gt;
+      &lt;/div&gt;
+      &lt;div class="field pwf"&gt;
+        &lt;label for="pwNew2"&gt;もう一度入力&lt;/label&gt;
+        &lt;input type="password" id="pwNew2" autocomplete="new-password"&gt;
+      &lt;/div&gt;
+      &lt;p class="lead" id="setPwNote"&gt;このパスワードを忘れると、ファイルは誰にも開けなくなります。&lt;/p&gt;
+      &lt;div class="err" id="setPwErr"&gt;&lt;/div&gt;
+      &lt;div class="row"&gt;
+        &lt;button type="submit" class="primary" id="btnSetPw"&gt;決定&lt;/button&gt;
+        &lt;button type="button" id="btnSetPwCancel"&gt;キャンセル&lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/form&gt;
+  &lt;/div&gt;
+
+  &lt;!-- アップロード --&gt;
+  &lt;div class="scroll gutter" id="viewUpload" hidden&gt;
+    &lt;form class="stack panel" id="formUpload" autocomplete="off"&gt;
+      &lt;h1 id="upTitle"&gt;暗号化してドライブに保存&lt;/h1&gt;
+      &lt;div class="queue" id="queue"&gt;&lt;/div&gt;
+      &lt;div class="total" id="upTotal"&gt;&lt;/div&gt;
+      &lt;div class="warnbox" id="upWarn" hidden&gt;&lt;/div&gt;
+      &lt;div id="upOptions" class="stack" style="gap:14px; margin:0; max-width:none"&gt;
+        &lt;label class="check"&gt;&lt;input type="checkbox" id="hideName"&gt;&lt;span&gt;ドライブ上のファイル名も隠す&lt;small&gt;ドライブでは「kgm-xxxx.kgm」のような名前になり、元の名前は開いたときだけ表示されます。&lt;/small&gt;&lt;/span&gt;&lt;/label&gt;
+        &lt;label class="check" id="upUseSessionRow"&gt;&lt;input type="checkbox" id="upUseSession" checked&gt;&lt;span&gt;解錠中のパスワードで暗号化する&lt;/span&gt;&lt;/label&gt;
+        &lt;div class="field upf"&gt;
+          &lt;label for="upPw1"&gt;パスワード&lt;/label&gt;
+          &lt;input type="password" id="upPw1" autocomplete="new-password"&gt;
+        &lt;/div&gt;
+        &lt;div class="field upf"&gt;
+          &lt;label for="upPw2"&gt;もう一度入力&lt;/label&gt;
+          &lt;input type="password" id="upPw2" autocomplete="new-password"&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class="err" id="upErr"&gt;&lt;/div&gt;
+      &lt;div class="row"&gt;
+        &lt;button type="submit" class="primary" id="btnUpStart"&gt;暗号化して保存&lt;/button&gt;
+        &lt;button type="button" id="btnUpCancel"&gt;キャンセル&lt;/button&gt;
+      &lt;/div&gt;
+      &lt;p class="lead" id="upNote"&gt;保存が終わるまで、この画面を開いたままにしてください。&lt;/p&gt;
+    &lt;/form&gt;
+  &lt;/div&gt;
+
+  &lt;!-- ビューア --&gt;
+  &lt;div class="viewer gutter" id="viewViewer" hidden&gt;
+    &lt;div class="vprog" id="vprog"&gt;
+      &lt;span id="vprogText"&gt;ダウンロードして復号しています…&lt;/span&gt;
+      &lt;div class="bar"&gt;&lt;i id="vprogBar"&gt;&lt;/i&gt;&lt;/div&gt;
+      &lt;div&gt;&lt;button type="button" id="btnViewerAbort"&gt;中止&lt;/button&gt;&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class="media" id="vmedia"&gt;&lt;/div&gt;
+    &lt;div class="vmeta" id="vmeta"&gt;&lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;textarea id="editor" class="gutter" hidden spellcheck="false" aria-label="本文"&gt;&lt;/textarea&gt;
+&lt;/main&gt;
+
+&lt;footer class="gutter"&gt;
+  &lt;span id="count"&gt;&amp;nbsp;&lt;/span&gt;
+  &lt;span&gt;AES-256-GCM ・ 5分離れると自動ロック&lt;/span&gt;
+&lt;/footer&gt;
+
+&lt;div id="toast" hidden role="status"&gt;&lt;/div&gt;
+&lt;div class="overlay" id="askWrap" hidden&gt;
+  &lt;div class="dialog" role="alertdialog" aria-modal="true"&gt;
+    &lt;p id="askMsg"&gt;&lt;/p&gt;
+    &lt;div class="row"&gt;
+      &lt;button class="primary" id="askOk"&gt;&lt;/button&gt;
+      &lt;button id="askCancel"&gt;キャンセル&lt;/button&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="overlay" id="linkWrap" hidden&gt;
+  &lt;div class="dialog" role="dialog" aria-modal="true" aria-labelledby="linkTitle"&gt;
+    &lt;p id="linkTitle"&gt;&lt;b&gt;このファイルを直接開くリンク&lt;/b&gt;&lt;/p&gt;
+    &lt;input type="text" id="linkUrl" readonly aria-label="リンク"&gt;
+    &lt;p class="lead" id="linkNote"&gt;ブックマークやホーム画面に追加しておくと、パスワードを入れるだけでこのファイルを開けます。リンクを開けるのは自分のGoogleアカウントだけです。&lt;/p&gt;
+    &lt;div class="row"&gt;
+      &lt;button class="primary" id="linkCopy"&gt;コピー&lt;/button&gt;
+      &lt;button id="linkClose"&gt;閉じる&lt;/button&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+&lt;input type="file" id="fileInput" multiple hidden&gt;
+
+&lt;!-- テキストメモの暗号処理（v1・PC版と共通・DOM非依存） --&gt;
+&lt;script&gt;
+const KM = (() =&gt; {
+  const MAGIC = '#kagimemo v1';
+  const DEFAULT_ITER = 600000;
+  const te = new TextEncoder(), td = new TextDecoder();
+
+  function b64enc(u8) {
+    let s = '';
+    for (let i = 0; i &lt; u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function b64dec(str) {
+    const s = atob(str), u = new Uint8Array(s.length);
+    for (let i = 0; i &lt; s.length; i++) u[i] = s.charCodeAt(i);
+    return u;
+  }
+  function header(iter) { return `${MAGIC} pbkdf2-sha256 ${iter} aes-256-gcm`; }
+
+  async function deriveKey(pw, salt, iter) {
+    const base = await crypto.subtle.importKey('raw', te.encode(pw), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+
+  async function encrypt(text, key, salt, iter) {
+    const head = header(iter);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv, additionalData: te.encode(head) }, key, te.encode(text)));
+    const all = new Uint8Array(28 + ct.length);
+    all.set(salt, 0); all.set(iv, 16); all.set(ct, 28);
+    return head + '\n' + b64enc(all).replace(/.{1,76}/g, '$&amp;\n');
+  }
+
+  function parse(txt) {
+    txt = txt.replace(/^﻿/, '');
+    const nl = txt.indexOf('\n');
+    const head = (nl &lt; 0 ? txt : txt.slice(0, nl)).trim();
+    const p = head.split(/\s+/);
+    if (p[0] + ' ' + p[1] !== MAGIC || p[2] !== 'pbkdf2-sha256' || p[4] !== 'aes-256-gcm') throw new Error('format');
+    const iter = parseInt(p[3], 10);
+    if (!(iter &gt;= 1000)) throw new Error('format');
+    let data;
+    try { data = b64dec(txt.slice(nl + 1).replace(/\s+/g, '')); } catch (e) { throw new Error('format'); }
+    if (data.length &lt; 28 + 16) throw new Error('format');
+    return { head, iter, salt: data.slice(0, 16), iv: data.slice(16, 28), ct: data.slice(28) };
+  }
+
+  async function decrypt(parsed, key) {
+    const pt = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: parsed.iv, additionalData: te.encode(parsed.head) }, key, parsed.ct);
+    return td.decode(pt);
+  }
+
+  function newSalt() { return crypto.getRandomValues(new Uint8Array(16)); }
+
+  return { DEFAULT_ITER, deriveKey, encrypt, parse, decrypt, newSalt, b64enc, b64dec };
+})();
+&lt;/script&gt;
+
+&lt;!-- ファイルの暗号処理（.kgm・分割暗号化・DOM非依存） --&gt;
+&lt;script&gt;
+const KB = (() =&gt; {
+  const MAGIC = [0x4B, 0x47, 0x4D, 0x42]; // "KGMB"
+  const VERSION = 1;
+  const CHUNK = 4 * 1024 * 1024;
+  const TAG = 16;
+  const META_INDEX = 0xFFFFFFFF;
+  const te = new TextEncoder(), td = new TextDecoder();
+
+  function u32(n) { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n &gt;&gt;&gt; 0, false); return b; }
+  function readU32(u8, off) { return new DataView(u8.buffer, u8.byteOffset, u8.byteLength).getUint32(off, false); }
+  function cat(...arrs) {
+    let n = 0; for (const a of arrs) n += a.length;
+    const out = new Uint8Array(n); let o = 0;
+    for (const a of arrs) { out.set(a, o); o += a.length; }
+    return out;
+  }
+  function iv(nonce, i) { return cat(nonce, u32(i)); }
+  function aad(prefix, i, final) { return cat(prefix, u32(i), new Uint8Array([final ? 1 : 0])); }
+  function chunkCount(size, chunk) { return Math.max(1, Math.ceil(size / chunk)); }
+  function ptLen(ctx, i) { return i &lt; ctx.n - 1 ? ctx.chunk : ctx.size - (ctx.n - 1) * ctx.chunk; }
+
+  function makePrefix(h) {
+    const json = te.encode(JSON.stringify(h));
+    return cat(new Uint8Array(MAGIC), new Uint8Array([VERSION]), u32(json.length), json);
+  }
+
+  // 先頭バイト列からヘッダを読む。足りなければ 'short'、形式違いは 'format'
+  function parsePrefix(u8) {
+    if (u8.length &lt; 9) throw new Error('short');
+    for (let k = 0; k &lt; 4; k++) if (u8[k] !== MAGIC[k]) throw new Error('format');
+    if (u8[4] !== VERSION) throw new Error('format');
+    const hl = readU32(u8, 5);
+    if (hl &gt; 4096) throw new Error('format');
+    if (u8.length &lt; 9 + hl + 4) throw new Error('short');
+    let h;
+    try { h = JSON.parse(td.decode(u8.subarray(9, 9 + hl))); } catch (e) { throw new Error('format'); }
+    const salt = KM.b64dec(h.salt || ''), nonce = KM.b64dec(h.nonce || '');
+    if (h.kdf !== 'pbkdf2-sha256' || h.cipher !== 'aes-256-gcm' || salt.length !== 16 || nonce.length !== 8 ||
+        !(h.iter &gt;= 1000 &amp;&amp; h.iter &lt;= 1e7) || !(h.chunk &gt;= 65536 &amp;&amp; h.chunk &lt;= 64 * 1024 * 1024)) throw new Error('format');
+    const prefix = u8.slice(0, 9 + hl);
+    const metaLen = readU32(u8, 9 + hl);
+    if (metaLen &gt; 60000) throw new Error('format');
+    const metaStart = 9 + hl + 4;
+    if (u8.length &lt; metaStart + metaLen) throw new Error('short');
+    return { h, salt, nonce, prefix, metaCt: u8.slice(metaStart, metaStart + metaLen), dataOffset: metaStart + metaLen };
+  }
+
+  // 暗号化の準備。total はアップロードするバイト数（先に分かるのでレジューム可能アップロードに使える）
+  async function prepare(file, pw) {
+    const salt = KM.newSalt(), nonce = crypto.getRandomValues(new Uint8Array(8));
+    const iter = KM.DEFAULT_ITER, chunk = CHUNK;
+    const key = await KM.deriveKey(pw, salt, iter);
+    const prefix = makePrefix({ kdf: 'pbkdf2-sha256', iter, salt: KM.b64enc(salt), cipher: 'aes-256-gcm', chunk, nonce: KM.b64enc(nonce) });
+    const meta = { name: String(file.name || 'file').slice(0, 200), type: file.type || '', size: file.size, mtime: file.lastModified || Date.now() };
+    const metaCt = new Uint8Array(await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: iv(nonce, META_INDEX), additionalData: cat(prefix, te.encode('meta')) }, key, te.encode(JSON.stringify(meta))));
+    const head = cat(prefix, u32(metaCt.length), metaCt);
+    const n = chunkCount(file.size, chunk);
+    return { key, nonce, prefix, chunk, size: file.size, n, head, total: head.length + file.size + n * TAG, file };
+  }
+
+  async function encryptChunk(ctx, i) {
+    const start = i * ctx.chunk;
+    const pt = new Uint8Array(await ctx.file.slice(start, start + ptLen(ctx, i)).arrayBuffer());
+    return new Uint8Array(await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: iv(ctx.nonce, i), additionalData: aad(ctx.prefix, i, i === ctx.n - 1) }, ctx.key, pt));
+  }
+
+  // パスワードを試してメタ情報を復号する。違えば例外
+  async function unlock(parsed, pw) {
+    const key = await KM.deriveKey(pw, parsed.salt, parsed.h.iter);
+    const pt = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: iv(parsed.nonce, META_INDEX), additionalData: cat(parsed.prefix, te.encode('meta')) }, key, parsed.metaCt);
+    const meta = JSON.parse(td.decode(pt));
+    const size = Number(meta.size) || 0;
+    return { key, nonce: parsed.nonce, prefix: parsed.prefix, chunk: parsed.h.chunk, size, n: chunkCount(size, parsed.h.chunk), meta, dataOffset: parsed.dataOffset };
+  }
+
+  function ctLen(ctx, i) { return ptLen(ctx, i) + TAG; }
+
+  async function decryptChunk(ctx, i, ct) {
+    return new Uint8Array(await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: iv(ctx.nonce, i), additionalData: aad(ctx.prefix, i, i === ctx.n - 1) }, ctx.key, ct));
+  }
+
+  // 本体のストリームを読みながら復号し、Blob の配列を返す
+  async function decryptStream(ctx, reader, onProgress, isAborted) {
+    const q = [], parts = []; let qlen = 0, got = 0;
+    function take(n) {
+      const out = new Uint8Array(n); let o = 0;
+      while (o &lt; n) {
+        const h = q[0], k = Math.min(h.length, n - o);
+        out.set(h.subarray(0, k), o); o += k;
+        if (k === h.length) q.shift(); else q[0] = h.subarray(k);
+      }
+      qlen -= n; return out;
+    }
+    for (let i = 0; i &lt; ctx.n; i++) {
+      const need = ctLen(ctx, i);
+      while (qlen &lt; need) {
+        if (isAborted &amp;&amp; isAborted()) throw new Error('ABORT');
+        const { done, value } = await reader.read();
+        if (done) throw new Error('truncated');
+        q.push(value); qlen += value.length; got += value.length;
+        if (onProgress) onProgress(got);
+      }
+      parts.push(new Blob([await decryptChunk(ctx, i, take(need))]));
+    }
+    return parts;
+  }
+
+  return { CHUNK, prepare, encryptChunk, parsePrefix, unlock, decryptChunk, decryptStream, ctLen };
+})();
+&lt;/script&gt;
+
+&lt;!-- 画面処理 --&gt;
+&lt;script&gt;
+(() =&gt; {
+  const AUTO_LOCK_MS = 5 * 60 * 1000;
+  const HEAD_BYTES = 65536;
+  const PIECE = 8 * 1024 * 1024;              // アップロード1回分（256KiBの倍数）
+  const BIG_WARN = 500 * 1024 * 1024;
+  const $ = id =&gt; document.getElementById(id);
+  const views = ['viewStart', 'viewUnlock', 'viewSetPw', 'viewUpload', 'viewViewer', 'editor'];
+  const editor = $('editor');
+
+  const st = {
+    sessionPw: null,                     // ロックするまで覚えておくパスワード
+    key: null, salt: null, iter: KM.DEFAULT_ITER,
+    id: null, name: '', rev: null, dirty: false, savedAt: null,
+    pending: null,                       // 解錠待ちのファイル
+    setPwMode: 'new',                    // 'new' | 'change'
+    drive: null,                         // { token, folderId, at }
+    uploading: false, upAbort: false, upXhr: null, upFiles: [],
+    viewer: null,                        // { id, meta, url, blob }
+    viewAbort: false,
+  };
+
+  // ---------- 共通 ----------
+  function gs(fn, arg) {
+    return new Promise((resolve, reject) =&gt; {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
+    });
+  }
+  function errMsg(e) { return (e &amp;&amp; e.message ? e.message : String(e)).replace(/^Error:\s*/, ''); }
+  function fmtSize(n) {
+    if (n &lt; 1024) return n + ' B';
+    if (n &lt; 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+    if (n &lt; 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(n &lt; 10 * 1024 * 1024 ? 1 : 0) + ' MB';
+    return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+  }
+  function current() { return views.find(v =&gt; !$(v).hidden); }
+
+  function show(view) {
+    views.forEach(v =&gt; { $(v).hidden = v !== view; });
+    refreshHeader();
+  }
+  function refreshHeader() {
+    const v = current();
+    $('toolsEditor').hidden = v !== 'editor';
+    $('toolsViewer').hidden = v !== 'viewViewer' || !st.viewer || !st.viewer.url;
+    $('btnLock').hidden = !st.sessionPw || st.uploading;
+    $('chipUnlocked').hidden = !st.sessionPw || v === 'editor' || v === 'viewViewer';
+    const s = $('status');
+    s.className = 'status';
+    if (v === 'viewViewer') {
+      $('fname').textContent = st.viewer &amp;&amp; st.viewer.meta ? st.viewer.meta.name : '';
+      s.textContent = ''; $('count').innerHTML = '&amp;nbsp;'; return;
+    }
+    if (v !== 'editor') { $('fname').textContent = ''; s.textContent = ''; $('count').innerHTML = '&amp;nbsp;'; return; }
+    $('fname').textContent = st.name;
+    if (st.dirty) { s.textContent = '● 未保存'; s.classList.add('dirty'); }
+    else if (st.savedAt) { s.textContent = '保存済み ' + st.savedAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }); s.classList.add('saved'); }
+    else if (!st.id) { s.textContent = '未保存の新規メモ'; s.classList.add('dirty'); }
+    else { s.textContent = '変更なし'; }
+    $('count').textContent = editor.value.length.toLocaleString('ja-JP') + ' 文字';
+  }
+  let toastTimer;
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() =&gt; { t.hidden = true; }, 2800);
+  }
+  function busy(on, btn, label) {
+    document.querySelectorAll('header button, main button').forEach(b =&gt; { b.disabled = on; });
+    if (btn) { if (on) { btn.dataset.l = btn.textContent; btn.textContent = label; } else if (btn.dataset.l) btn.textContent = btn.dataset.l; }
+  }
+  function ask(msg, okLabel) {
+    return new Promise(resolve =&gt; {
+      $('askMsg').textContent = msg; $('askOk').textContent = okLabel; $('askWrap').hidden = false;
+      const done = v =&gt; { $('askWrap').hidden = true; $('askOk').onclick = $('askCancel').onclick = null; resolve(v); };
+      $('askOk').onclick = () =&gt; done(true);
+      $('askCancel').onclick = () =&gt; done(false);
+      $('askOk').focus();
+    });
+  }
+  function setDirty(v) { st.dirty = v; refreshHeader(); }
+  function clearDoc() {
+    st.key = null; st.salt = null; st.id = null; st.dirty = false; editor.value = '';
+    ['pwUnlock', 'pwNew1', 'pwNew2', 'upPw1', 'upPw2'].forEach(id =&gt; { $(id).value = ''; });
+  }
+  function closeViewer() {
+    st.viewAbort = true;
+    if (st.viewer &amp;&amp; st.viewer.url) URL.revokeObjectURL(st.viewer.url);
+    st.viewer = null;
+    $('vmedia').innerHTML = ''; $('vmeta').textContent = '';
+  }
+  async function confirmDiscard() {
+    if (current() !== 'editor' || (!st.dirty &amp;&amp; st.id)) return true;
+    return ask('保存していない変更があります。破棄しますか？', '破棄する');
+  }
+
+  if (!window.crypto || !crypto.subtle) {
+    $('startErr').textContent = 'このブラウザでは暗号機能が使えません。';
+    $('btnNew').disabled = $('btnAddFiles').disabled = true;
+  }
+
+  // ---------- Drive API（ブラウザから直接） ----------
+  async function drive() {
+    if (!st.drive || Date.now() - st.drive.at &gt; 40 * 60 * 1000) {
+      const r = await gs('getDriveAccess');
+      st.drive = { token: r.token, folderId: r.folderId, at: Date.now() };
+    }
+    return st.drive;
+  }
+  async function fetchMedia(id, start, end) {
+    const d = await drive();
+    const res = await fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?alt=media', {
+      headers: { Authorization: 'Bearer ' + d.token, Range: 'bytes=' + start + '-' + (end == null ? '' : end) },
+    });
+    if (res.status === 401) { st.drive = null; throw new Error('認証の期限が切れました。もう一度お試しください。'); }
+    if (!res.ok) throw new Error('ダウンロードに失敗しました（' + res.status + '）');
+    return res;
+  }
+
+  // ---------- 一覧 ----------
+  const EXT = {
+    image: /\.(jpe?g|png|gif|webp|heic|heif|avif|bmp|svg)$/i,
+    video: /\.(mp4|mov|m4v|webm|3gp|mkv|avi)$/i,
+    audio: /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i,
+  };
+  function describe(f) {
+    if (/\.kgm$/i.test(f.name)) {
+      const base = f.name.replace(/\.kgm$/i, '');
+      if (/^kgm-[0-9a-f]+$/i.test(base)) return { kind: 'file', label: '非公開', name: '（名前を隠したファイル）', bin: true };
+      for (const k of ['image', 'video', 'audio']) if (EXT[k].test(base)) return { kind: k, label: { image: '画像', video: '動画', audio: '音声' }[k], name: base, bin: true };
+      return { kind: 'file', label: 'ファイル', name: base, bin: true };
+    }
+    return { kind: 'memo', label: 'メモ', name: f.name, bin: false };
+  }
+  async function refreshList(keepErr) {
+    const box = $('files');
+    box.innerHTML = '&lt;div class="empty"&gt;読み込み中…&lt;/div&gt;';
+    if (!keepErr) $('startErr').textContent = '';
+    try {
+      const files = await gs('listFiles');
+      st.listLoaded = true;
+      box.innerHTML = '';
+      if (!files.length) {
+        box.innerHTML = '&lt;div class="empty"&gt;まだファイルがありません。「新規メモ」か「写真・ファイルを追加」から作れます。&lt;/div&gt;';
+        return;
+      }
+      for (const f of files) {
+        const info = describe(f);
+        const b = document.createElement('button');
+        b.className = 'file'; b.type = 'button';
+        const k = document.createElement('span'); k.className = 'kind ' + info.kind; k.textContent = info.label;
+        const n = document.createElement('span'); n.className = 'n'; n.textContent = info.name;
+        const d = document.createElement('span'); d.className = 'd';
+        d.textContent = new Date(f.updated).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) +
+          (info.bin ? '\n' + fmtSize(f.size) : '');
+        d.style.whiteSpace = 'pre';
+        b.append(k, n, d);
+        b.addEventListener('click', () =&gt; info.bin ? openBinary(f) : openText(f.id));
+        box.appendChild(b);
+      }
+    } catch (e) {
+      box.innerHTML = '';
+      $('startErr').textContent = '一覧を取得できませんでした: ' + errMsg(e);
+    }
+  }
+  function goList(reload) {
+    closeViewer(); st.pending = null; clearDoc();
+    setUrl(null);
+    show('viewStart');
+    if (reload !== false || !st.listLoaded) refreshList();
+  }
+
+  // ---------- 直接リンク（?id=…） ----------
+  // アドレスバーのURLを、開いているファイルのリンクに合わせる
+  function setUrl(id) {
+    try { google.script.history.replace(null, id ? { id } : {}, ''); } catch (e) { /* ウェブアプリ以外では無視 */ }
+  }
+  function getStartId() {
+    return new Promise(resolve =&gt; {
+      try { google.script.url.getLocation(loc =&gt; resolve((loc &amp;&amp; loc.parameter &amp;&amp; loc.parameter.id) || null)); }
+      catch (e) { resolve(null); }
+    });
+  }
+  async function openById(id) {
+    $('files').innerHTML = '&lt;div class="empty"&gt;ファイルを開いています…&lt;/div&gt;';
+    let info;
+    busy(true);
+    try { info = await gs('getFileInfo', id); }
+    catch (e) {
+      busy(false);
+      setUrl(null);
+      $('startErr').textContent = 'リンクのファイルを開けませんでした: ' + errMsg(e);
+      refreshList(true);
+      return;
+    }
+    busy(false);
+    if (describe(info).bin) await openBinary(info); else await openText(info.id);
+    if (current() === 'viewStart' &amp;&amp; !st.listLoaded) { setUrl(null); refreshList(true); }
+  }
+  async function showLink(id) {
+    if (!id) { toast('先に保存してください'); return; }
+    try {
+      if (!st.appUrl) st.appUrl = await gs('getAppUrl');
+    } catch (e) { toast('リンクを作れませんでした: ' + errMsg(e)); return; }
+    $('linkUrl').value = st.appUrl + '?id=' + encodeURIComponent(id);
+    $('linkCopy').textContent = 'コピー';
+    $('linkWrap').hidden = false;
+    $('linkUrl').focus(); $('linkUrl').select();
+  }
+  $('linkCopy').addEventListener('click', async () =&gt; {
+    const input = $('linkUrl'), text = input.value;
+    let ok = false;
+    try { if (navigator.clipboard &amp;&amp; window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; } } catch (e) { ok = false; }
+    if (!ok) {
+      input.focus(); input.select(); input.setSelectionRange(0, text.length);
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    }
+    $('linkCopy').textContent = ok ? 'コピーしました' : '長押しでコピー';
+  });
+  $('linkClose').addEventListener('click', () =&gt; { $('linkWrap').hidden = true; });
+  $('btnEditorLink').addEventListener('click', () =&gt; showLink(st.id));
+  $('btnViewerLink').addEventListener('click', () =&gt; showLink(st.viewer &amp;&amp; st.viewer.id));
+
+  // ---------- 解錠 ----------
+  function askPassword(pending) {
+    st.pending = pending;
+    $('unlockName').textContent = pending.label;
+    $('unlockErr').textContent = ''; $('pwUnlock').value = '';
+    show('viewUnlock');
+    $('pwUnlock').focus();
+  }
+  // パスワードを試す。成功すれば true
+  async function tryUnlock(p, pw) {
+    if (p.type === 'text') {
+      const key = await KM.deriveKey(pw, p.parsed.salt, p.parsed.iter);
+      const text = await KM.decrypt(p.parsed, key);
+      Object.assign(st, { key, salt: p.parsed.salt, iter: p.parsed.iter, id: p.id, name: p.name, rev: p.rev, savedAt: null, dirty: false });
+      editor.value = text; editor.scrollTop = 0;
+      show('editor');
+      return;
+    }
+    const ctx = await KB.unlock(p.parsed, pw);
+    viewBinary(p.f, ctx);
+  }
+  async function unlockWithSession(p) {
+    setUrl(p.type === 'text' ? p.id : p.f.id);
+    if (st.sessionPw) {
+      busy(true);
+      try { await tryUnlock(p, st.sessionPw); return; } catch (e) { /* 別のパスワード */ } finally { busy(false); }
+    }
+    askPassword(p);
+  }
+  $('formUnlock').addEventListener('submit', async e =&gt; {
+    e.preventDefault();
+    const p = st.pending; if (!p) return;
+    const pw = $('pwUnlock').value;
+    $('unlockErr').textContent = '';
+    $('pwUnlock').blur();
+    busy(true, $('btnUnlock'), '復号中…');
+    try {
+      await tryUnlock(p, pw);
+      st.sessionPw = pw; $('pwUnlock').value = ''; st.pending = null;
+      refreshHeader();
+    } catch (err) {
+      $('unlockErr').textContent = 'パスワードが違うか、ファイルが壊れています。';
+    } finally { busy(false, $('btnUnlock')); }
+  });
+  $('btnUnlockBack').addEventListener('click', () =&gt; goList(false));
+
+  // ---------- テキストメモ ----------
+  async function openText(id) {
+    $('startErr').textContent = '';
+    busy(true);
+    let r, parsed;
+    try {
+      r = await gs('readFile', id);
+      try { parsed = KM.parse(r.content); }
+      catch (e) { $('startErr').textContent = `「${r.name}」は鍵メモ形式のファイルではありません。`; return; }
+    } catch (e) {
+      $('startErr').textContent = '読み込めませんでした: ' + errMsg(e); return;
+    } finally { busy(false); }
+    clearDoc();
+    unlockWithSession({ type: 'text', id: r.id, name: r.name, rev: r.rev, parsed, label: r.name });
+  }
+
+  function openSetPw(mode) {
+    st.setPwMode = mode;
+    const isNew = mode === 'new';
+    $('setPwTitle').textContent = isNew ? '新しいメモ' : '新しいパスワード';
+    $('nameField').hidden = !isNew;
+    $('useSessionRow').hidden = !isNew || !st.sessionPw;
+    $('useSession').checked = isNew &amp;&amp; !!st.sessionPw;
+    syncPwFields();
+    $('setPwNote').textContent = isNew
+      ? 'このパスワードを忘れると、ファイルは誰にも開けなくなります。'
+      : '保存したときから新しいパスワードに切り替わります。';
+    $('pwNew1').value = $('pwNew2').value = ''; $('setPwErr').textContent = '';
+    show('viewSetPw');
+  }
+  function syncPwFields() {
+    const use = !$('useSessionRow').hidden &amp;&amp; $('useSession').checked;
+    document.querySelectorAll('.pwf').forEach(el =&gt; { el.hidden = use; });
+  }
+  $('useSession').addEventListener('change', syncPwFields);
+  $('btnNew').addEventListener('click', () =&gt; openSetPw('new'));
+  $('btnPw').addEventListener('click', () =&gt; openSetPw('change'));
+  $('btnSetPwCancel').addEventListener('click', () =&gt; { if (st.setPwMode === 'change') show('editor'); else goList(false); });
+
+  function checkNewPw(a, b) {
+    if (a !== b) return '2つのパスワードが一致しません。';
+    if (a.length &lt; 4) return 'パスワードは4文字以上にしてください。';
+    return '';
+  }
+  $('formSetPw').addEventListener('submit', async e =&gt; {
+    e.preventDefault();
+    const isNew = st.setPwMode === 'new';
+    const useSession = isNew &amp;&amp; !$('useSessionRow').hidden &amp;&amp; $('useSession').checked;
+    const a = useSession ? st.sessionPw : $('pwNew1').value;
+    if (isNew &amp;&amp; !$('newName').value.trim()) { $('setPwErr').textContent = 'ファイル名を入力してください。'; return; }
+    if (!useSession) { const m = checkNewPw(a, $('pwNew2').value); if (m) { $('setPwErr').textContent = m; return; } }
+    busy(true, $('btnSetPw'), '鍵を作成中…');
+    try {
+      const salt = KM.newSalt(), iter = KM.DEFAULT_ITER;
+      const key = await KM.deriveKey(a, salt, iter);
+      Object.assign(st, { key, salt, iter });
+      $('pwNew1').value = $('pwNew2').value = '';
+      if (isNew) {
+        if (!st.sessionPw) st.sessionPw = a;
+        Object.assign(st, { id: null, rev: null, name: $('newName').value.trim(), savedAt: null, dirty: true });
+        editor.value = '';
+        show('editor');
+        editor.focus();
+      } else {
+        show('editor'); setDirty(true);
+        toast('パスワードを変更しました。保存すると反映されます。');
+      }
+    } finally { busy(false, $('btnSetPw')); }
+  });
+
+  async function saveText(force) {
+    if (!st.key) return;
+    busy(true, $('btnSave'), '保存中…');
+    try {
+      const content = await KM.encrypt(editor.value, st.key, st.salt, st.iter);
+      const r = await gs('saveFile', { id: st.id, name: st.name, content, rev: st.rev, force: !!force });
+      Object.assign(st, { id: r.id, name: r.name, rev: r.rev, savedAt: new Date() });
+      setUrl(r.id);
+      setDirty(false);
+      toast('Googleドライブに保存しました');
+    } catch (e) {
+      const m = errMsg(e);
+      busy(false, $('btnSave'));
+      if (m.indexOf('CONFLICT') &gt;= 0) {
+        if (await ask('このメモは、開いたあとにほかの端末で更新されています。今の内容で上書きしますか？', '上書き保存')) saveText(true);
+      } else {
+        toast('保存できませんでした: ' + m);
+      }
+      return;
+    }
+    busy(false, $('btnSave'));
+  }
+  $('btnSave').addEventListener('click', () =&gt; saveText(false));
+  $('btnEditorClose').addEventListener('click', async () =&gt; { if (await confirmDiscard()) goList(); });
+
+  async function trash(id, name) {
+    if (!(await ask(`「${name}」をドライブのゴミ箱に移動しますか？（30日以内ならドライブから元に戻せます）`, '削除する'))) return false;
+    busy(true);
+    try { await gs('trashFile', id); toast('ゴミ箱に移動しました'); return true; }
+    catch (e) { toast('削除できませんでした: ' + errMsg(e)); return false; }
+    finally { busy(false); }
+  }
+  $('btnEditorTrash').addEventListener('click', async () =&gt; {
+    if (!st.id) { if (await confirmDiscard()) goList(); return; }
+    if (await trash(st.id, st.name)) { st.dirty = false; goList(); }
+  });
+
+  // ---------- 画像・動画・ファイルを開く ----------
+  async function openBinary(f) {
+    $('startErr').textContent = '';
+    busy(true);
+    let parsed;
+    try {
+      const res = await fetchMedia(f.id, 0, HEAD_BYTES - 1);
+      const head = new Uint8Array(await res.arrayBuffer());
+      try { parsed = KB.parsePrefix(head); }
+      catch (e) { $('startErr').textContent = `「${f.name}」は鍵メモ形式のファイルではないか、壊れています。`; return; }
+    } catch (e) {
+      $('startErr').textContent = '読み込めませんでした: ' + errMsg(e); return;
+    } finally { busy(false); }
+    unlockWithSession({ type: 'bin', f, parsed, label: describe(f).name });
+  }
+
+  async function viewBinary(f, ctx) {
+    closeViewer();
+    st.viewAbort = false;
+    st.viewer = { id: f.id, meta: ctx.meta, url: null };
+    const myViewer = st.viewer;
+    $('vprog').hidden = false; $('vprogBar').style.width = '0%';
+    $('btnViewerAbort').textContent = '中止';
+    $('vprogText').textContent = `ダウンロードして復号しています… 0 / ${fmtSize(ctx.size)}`;
+    show('viewViewer');
+    const bodyLen = ctx.size + ctx.n * 16;
+    try {
+      const res = await fetchMedia(f.id, ctx.dataOffset);
+      const parts = await KB.decryptStream(ctx, res.body.getReader(), got =&gt; {
+        const r = Math.min(1, got / bodyLen);
+        $('vprogBar').style.width = (r * 100).toFixed(1) + '%';
+        $('vprogText').textContent = `ダウンロードして復号しています… ${fmtSize(Math.round(r * ctx.size))} / ${fmtSize(ctx.size)}`;
+      }, () =&gt; st.viewAbort || st.viewer !== myViewer);
+      if (st.viewer !== myViewer) return;
+      const type = ctx.meta.type || 'application/octet-stream';
+      const blob = new Blob(parts, { type });
+      myViewer.url = URL.createObjectURL(blob);
+      $('vprog').hidden = true;
+      renderMedia(blob, type, myViewer.url);
+      $('vmeta').textContent = `${ctx.meta.name} ・ ${fmtSize(ctx.size)}` +
+        (ctx.meta.mtime ? ' ・ ' + new Date(ctx.meta.mtime).toLocaleString('ja-JP') : '');
+      refreshHeader();
+    } catch (e) {
+      if (st.viewer !== myViewer) return;
+      const m = errMsg(e);
+      if (m === 'ABORT') return;
+      $('vprogText').textContent = m === 'truncated' ? 'ファイルが途中で切れています。' :
+        (/OperationError|decrypt/i.test(m) || e.name === 'OperationError') ? 'ファイルが壊れているか、書き換えられています。' :
+        '開けませんでした: ' + m;
+      $('vprogBar').style.width = '0%';
+      $('btnViewerAbort').textContent = '一覧に戻る';
+    }
+  }
+  function renderMedia(blob, type, url) {
+    const box = $('vmedia'); box.innerHTML = '';
+    let el;
+    if (type.startsWith('image/')) {
+      el = document.createElement('img'); el.src = url; el.alt = st.viewer.meta.name;
+    } else if (type.startsWith('video/')) {
+      el = document.createElement('video'); el.src = url; el.controls = true; el.playsInline = true; el.preload = 'metadata';
+    } else if (type.startsWith('audio/')) {
+      el = document.createElement('audio'); el.src = url; el.controls = true;
+    } else if ((type.startsWith('text/') || /json|xml|csv/.test(type)) &amp;&amp; blob.size &lt;= 2 * 1024 * 1024) {
+      el = document.createElement('pre');
+      blob.text().then(t =&gt; { el.textContent = t; });
+    } else {
+      el = document.createElement('p'); el.className = 'lead';
+      el.textContent = 'この種類のファイルはここでは表示できません。「端末に保存」で保存してから開いてください。';
+    }
+    box.appendChild(el);
+  }
+  $('btnViewerAbort').addEventListener('click', () =&gt; { $('btnViewerAbort').textContent = '中止'; goList(false); });
+  $('btnViewerClose').addEventListener('click', () =&gt; goList(false));
+  $('btnDownload').addEventListener('click', () =&gt; {
+    const v = st.viewer; if (!v || !v.url) return;
+    const a = document.createElement('a');
+    a.href = v.url; a.download = v.meta.name || 'file'; a.target = '_self'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('復号したファイルを保存しました（端末内は暗号化されません）');
+  });
+  $('btnViewerTrash').addEventListener('click', async () =&gt; {
+    const v = st.viewer; if (!v) return;
+    if (await trash(v.id, v.meta.name)) goList();
+  });
+
+  // ---------- 追加（暗号化してアップロード） ----------
+  $('btnAddFiles').addEventListener('click', () =&gt; { $('fileInput').value = ''; $('fileInput').click(); });
+  $('fileInput').addEventListener('change', e =&gt; {
+    const files = Array.from(e.target.files || []);
+    if (files.length) openUpload(files);
+  });
+
+  function openUpload(files) {
+    st.upFiles = files.map(file =&gt; ({ file, el: null }));
+    const q = $('queue'); q.innerHTML = '';
+    let total = 0, big = false;
+    for (const it of st.upFiles) {
+      total += it.file.size; if (it.file.size &gt; BIG_WARN) big = true;
+      const row = document.createElement('div'); row.className = 'qitem';
+      row.innerHTML = '&lt;div class="qtop"&gt;&lt;span class="qn"&gt;&lt;/span&gt;&lt;span class="qs"&gt;&lt;/span&gt;&lt;/div&gt;&lt;div class="bar"&gt;&lt;i&gt;&lt;/i&gt;&lt;/div&gt;';
+      row.querySelector('.qn').textContent = it.file.name;
+      row.querySelector('.qs').textContent = fmtSize(it.file.size);
+      q.appendChild(row); it.el = row;
+    }
+    $('upTotal').textContent = `${files.length} 件 ・ 合計 ${fmtSize(total)}`;
+    $('upWarn').hidden = !big;
+    $('upWarn').textContent = '500MBを超えるファイルがあります。保存はできますが、開くときにファイル全体を端末のメモリに展開するため、端末によっては表示できないことがあります。';
+    $('upUseSessionRow').hidden = !st.sessionPw;
+    $('upUseSession').checked = !!st.sessionPw;
+    syncUpFields();
+    $('upOptions').hidden = false; $('upErr').textContent = '';
+    $('upTitle').textContent = '暗号化してドライブに保存';
+    $('btnUpStart').hidden = false; $('btnUpStart').disabled = false;
+    $('btnUpCancel').textContent = 'キャンセル'; $('btnUpCancel').disabled = false;
+    $('upNote').textContent = '保存が終わるまで、この画面を開いたままにしてください。';
+    show('viewUpload');
+  }
+  function syncUpFields() {
+    const use = !$('upUseSessionRow').hidden &amp;&amp; $('upUseSession').checked;
+    document.querySelectorAll('.upf').forEach(el =&gt; { el.hidden = use; });
+  }
+  $('upUseSession').addEventListener('change', syncUpFields);
+
+  $('btnUpCancel').addEventListener('click', () =&gt; {
+    if (st.uploading) { st.upAbort = true; if (st.upXhr) st.upXhr.abort(); return; }
+    goList(st.upDone === true);
+  });
+
+  $('formUpload').addEventListener('submit', async e =&gt; {
+    e.preventDefault();
+    if (st.uploading) return;
+    const useSession = !$('upUseSessionRow').hidden &amp;&amp; $('upUseSession').checked;
+    const pw = useSession ? st.sessionPw : $('upPw1').value;
+    if (!useSession) { const m = checkNewPw(pw, $('upPw2').value); if (m) { $('upErr').textContent = m; return; } }
+    $('upPw1').value = $('upPw2').value = '';
+    if (!st.sessionPw) st.sessionPw = pw;
+    const hide = $('hideName').checked;
+
+    st.uploading = true; st.upAbort = false; st.upDone = false;
+    $('upOptions').hidden = true; $('btnUpStart').hidden = true; $('upErr').textContent = '';
+    $('btnUpCancel').textContent = '中止';
+    $('upTitle').textContent = '暗号化して保存しています…';
+    refreshHeader();
+    let wake = null;
+    try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (err) { wake = null; }
+
+    let ok = 0, fail = 0;
+    for (const it of st.upFiles) {
+      if (st.upAbort) break;
+      const qs = it.el.querySelector('.qs'), bar = it.el.querySelector('.bar &gt; i');
+      try {
+        qs.textContent = '準備中…';
+        await uploadOne(it.file, pw, hide, (sent, total) =&gt; {
+          const r = sent / total;
+          bar.style.width = (r * 100).toFixed(1) + '%';
+          qs.textContent = `${Math.floor(r * 100)}% ・ ${fmtSize(it.file.size)}`;
+        });
+        bar.style.width = '100%'; qs.textContent = '保存しました'; it.el.classList.add('done'); ok++;
+      } catch (err) {
+        fail++; it.el.classList.add('fail');
+        qs.textContent = errMsg(err) === 'ABORT' ? '中止しました' : '失敗: ' + errMsg(err);
+      }
+    }
+    try { if (wake) await wake.release(); } catch (err) { /* noop */ }
+    st.uploading = false; st.upXhr = null; st.upDone = ok &gt; 0;
+    $('upTitle').textContent = st.upAbort ? '中止しました' : (fail ? `${ok} 件保存・${fail} 件失敗` : `${ok} 件を保存しました`);
+    $('btnUpCancel').textContent = '一覧に戻る';
+    $('upNote').textContent = st.upAbort ? '途中まで送ったデータは保存されていません。' : 'ドライブには暗号化されたデータだけが保存されています。';
+    refreshHeader();
+  });
+
+  // Drive API のレジューム可能アップロード（暗号化しながら8MBずつ送る）
+  async function uploadOne(file, pw, hide, onProgress) {
+    const ctx = await KB.prepare(file, pw);
+    const d = await drive();
+    const rnd = Array.from(crypto.getRandomValues(new Uint8Array(6)), b =&gt; b.toString(16).padStart(2, '0')).join('');
+    const driveName = hide ? `kgm-${rnd}.kgm` : `${file.name}.kgm`;
+    const init = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&amp;fields=id', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + d.token, 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ name: driveName, parents: [d.folderId], mimeType: 'application/octet-stream' }),
+    });
+    if (init.status === 401) { st.drive = null; throw new Error('認証の期限が切れました。もう一度お試しください。'); }
+    const session = init.headers.get('Location');
+    if (!init.ok || !session) throw new Error('アップロードを開始できませんでした（' + init.status + '）');
+
+    const q = [ctx.head]; let qlen = ctx.head.length, sent = 0;
+    function take(n) {
+      const out = new Uint8Array(n); let o = 0;
+      while (o &lt; n) {
+        const h = q[0], k = Math.min(h.length, n - o);
+        out.set(h.subarray(0, k), o); o += k;
+        if (k === h.length) q.shift(); else q[0] = h.subarray(k);
+      }
+      qlen -= n; return out;
+    }
+    for (let i = 0; i &lt; ctx.n; i++) {
+      if (st.upAbort) throw new Error('ABORT');
+      const ct = await KB.encryptChunk(ctx, i);
+      q.push(ct); qlen += ct.length;
+      while (qlen &gt;= PIECE) {
+        const piece = take(PIECE);
+        await putPiece(session, piece, sent, ctx.total, p =&gt; onProgress(sent + p, ctx.total));
+        sent += piece.length; onProgress(sent, ctx.total);
+      }
+    }
+    if (qlen &gt; 0) {
+      const piece = take(qlen);
+      await putPiece(session, piece, sent, ctx.total, p =&gt; onProgress(sent + p, ctx.total));
+      sent += piece.length;
+    }
+    onProgress(sent, ctx.total);
+  }
+
+  function putOnce(url, bytes, start, total, onProg) {
+    return new Promise((resolve, reject) =&gt; {
+      const x = new XMLHttpRequest();
+      st.upXhr = x;
+      x.open('PUT', url);
+      x.setRequestHeader('Content-Range', `bytes ${start}-${start + bytes.length - 1}/${total}`);
+      x.upload.onprogress = ev =&gt; { if (ev.lengthComputable) onProg(ev.loaded); };
+      x.onload = () =&gt; resolve({ status: x.status, range: x.getResponseHeader('Range') });
+      x.onerror = () =&gt; reject(new Error('通信エラー'));
+      x.onabort = () =&gt; reject(new Error('ABORT'));
+      x.send(bytes);
+    });
+  }
+  async function putPiece(url, piece, start, total, onProg) {
+    let off = 0, tries = 0;
+    while (true) {
+      if (st.upAbort) throw new Error('ABORT');
+      let r;
+      try { r = await putOnce(url, piece.subarray(off), start + off, total, p =&gt; onProg(off + p)); }
+      catch (e) {
+        if (errMsg(e) === 'ABORT' || ++tries &gt; 4) throw e;
+        await new Promise(res =&gt; setTimeout(res, 1500 * tries));
+        continue;
+      }
+      if (r.status === 200 || r.status === 201) return;
+      if (r.status === 308) {
+        // 受け取られた位置を確認し、足りない分があれば続きを送る
+        const m = r.range &amp;&amp; /bytes=0-(\d+)/.exec(r.range);
+        const committed = m ? Number(m[1]) + 1 : start + piece.length;
+        if (committed &gt;= start + piece.length) return;
+        off = Math.max(0, committed - start);
+        continue;
+      }
+      if (r.status &gt;= 500 &amp;&amp; ++tries &lt;= 4) { await new Promise(res =&gt; setTimeout(res, 1500 * tries)); continue; }
+      throw new Error('アップロードに失敗しました（' + r.status + '）');
+    }
+  }
+
+  // ---------- ロック ----------
+  async function lock(auto) {
+    if (st.uploading) return;
+    if (!auto &amp;&amp; !(await confirmDiscard())) return;
+    st.sessionPw = null;
+    // ファイルを開いていたときは、そのファイルのパスワード入力に戻る
+    const v = current();
+    const openId = v === 'editor' ? st.id : v === 'viewViewer' &amp;&amp; st.viewer ? st.viewer.id : null;
+    goList(false);
+    if (openId) openById(openId);
+    if (auto) toast('自動でロックしました');
+  }
+  $('btnLock').addEventListener('click', () =&gt; lock(false));
+
+  // 画面を離れて5分たったら自動ロック（未保存の変更・アップロード中はロックしない）
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () =&gt; {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (hiddenAt &amp;&amp; Date.now() - hiddenAt &gt; AUTO_LOCK_MS &amp;&amp; !st.uploading &amp;&amp; !(current() === 'editor' &amp;&amp; (st.dirty || !st.id))) {
+      if (st.sessionPw || st.key || st.viewer) lock(true);
+    }
+    hiddenAt = 0;
+  });
+
+  // ---------- その他 ----------
+  $('btnReload').addEventListener('click', refreshList);
+  editor.addEventListener('input', () =&gt; { if (!st.dirty) setDirty(true); else refreshHeader(); });
+  document.addEventListener('keydown', e =&gt; {
+    if ((e.ctrlKey || e.metaKey) &amp;&amp; e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      if (current() === 'editor') saveText(false);
+    }
+  });
+  window.addEventListener('beforeunload', e =&gt; { if (st.dirty || st.uploading) { e.preventDefault(); e.returnValue = ''; } });
+
+  show('viewStart');
+  getStartId().then(id =&gt; { if (id) openById(id); else refreshList(); });
+})();
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+  </div>
+</section>
+
+<section id="use">
+  <h2>使い方</h2>
+  <ul>
+    <li>初めて開くと、マイドライブに「鍵メモ」フォルダが自動で作られます。一覧にはこのフォルダのファイルだけが表示されます。</li>
+    <li><b>新規メモ</b>：ファイル名とパスワードを決めて本文を書き、「保存」を押すとドライブにファイルができます。</li>
+    <li><b>写真・ファイルを追加</b>：写真、動画、PDFなど、どんな拡張子のファイルでも選べます（複数可）。暗号化してから送るので、ドライブには中身の読めない .kgm ファイルとして保存されます。「ドライブ上のファイル名も隠す」にチェックすると、ドライブでのファイル名も「kgm-xxxx.kgm」になり、元の名前は開いたときだけ表示されます。</li>
+    <li><b>開く</b>：一覧のファイルをタップしてパスワードを入れます。画像・動画・音声・テキストはその場で表示され、それ以外のファイルは「端末に保存」で取り出せます。</li>
+    <li><b>直接リンク</b>：ファイルを開いて「リンク」を押すと、そのファイル専用のURL（ウェブアプリのURLの末尾に <code>?id=ファイルID</code> が付いたもの）が表示されます。このURLを開くと一覧を経由せずにパスワード入力になり、そのまま編集画面や表示画面に進みます。ブックマークやホーム画面に追加しておくと便利です。リンクを開けるのは自分のGoogleアカウントだけです。</li>
+    <li><b>パスワードの記憶</b>：一度入力したパスワードは「ロック」するまで覚えておき、同じパスワードのファイルは入力なしで開けます。</li>
+    <li><b>保存（メモ）</b>：暗号化した内容で、ドライブ上のファイルを直接上書きします。開いたあとに別の端末で同じメモが更新されていた場合は、上書きしてよいか確認が出ます。</li>
+    <li><b>削除</b>：ドライブのゴミ箱に移動します。30日以内ならドライブから元に戻せます。</li>
+    <li><b>ロック</b>：覚えていたパスワードと、表示中の内容をメモリから消します。アプリを離れて5分たつと自動でロックされます（未保存の変更があるときや、アップロード中はロックしません）。</li>
+  </ul>
+</section>
+
+<section id="size">
+  <h2>ファイルサイズの目安</h2>
+  <dl class="setting">
+    <dt>写真</dt><dd>問題なし（1枚数MB）</dd>
+    <dt>動画</dt><dd>〜300MB程度まで快適</dd>
+    <dt>500MB以上</dt><dd>保存はできるが、開けないことがある</dd>
+  </dl>
+  <ul>
+    <li>保存（アップロード）は暗号化しながら少しずつ送るので、数GBのファイルでも端末のメモリはほとんど使いません。時間は通信速度しだいで、モバイル回線なら100MBで1〜2分が目安です。</li>
+    <li>開くときは、復号したファイル全体をいったん端末のメモリに置いてから表示します。そのため、扱える大きさは端末のメモリで決まり、特にiPhoneのSafariは大きなファイルでタブが落ちやすくなります。</li>
+    <li>暗号化してもファイルサイズはほとんど増えません（4MBごとに16バイト）。ドライブの容量は元のファイルとほぼ同じだけ使います。</li>
+  </ul>
+</section>
+
+<section id="caution">
+  <h2>注意点</h2>
+  <div class="note warn">
+    <span class="h">パスワードを忘れると復元できません</span>
+    <p>パスワードはどこにも保存されません。忘れた場合、作った本人を含めて誰もファイルを開けなくなります。</p>
+  </div>
+  <div class="note">
+    <span class="h">複数のGoogleアカウントにログインしている場合</span>
+    <p>スマホのブラウザで複数のアカウントにログインしていると、Apps Script のウェブアプリがエラーになることがあります。スクリプトを作ったアカウントだけでログインするか、そのアカウントだけを使うブラウザで開いてください。</p>
+  </div>
+  <div class="note">
+    <span class="h">承認画面の「ドライブのすべてのファイル」について</span>
+    <p>Apps Script の仕組み上、承認画面ではドライブ全体へのアクセスを求められます。実際にコードが読み書きするのは「鍵メモ」フォルダのファイルだけで、アクセスできるのも自分のアカウントだけです。</p>
+  </div>
+  <div class="note">
+    <span class="h">「端末に保存」したファイルは暗号化されていません</span>
+    <p>取り出したファイルは普通のファイルとして端末に保存されます。用が済んだら削除してください。</p>
+  </div>
+  <div class="note">
+    <span class="h">アップロード中は画面を開いたままに</span>
+    <p>スマホでは、ほかのアプリに切り替えたり画面を消したりすると、ブラウザの処理が止まって送信が失敗することがあります。途中で止まったファイルはドライブに保存されないので、もう一度追加してください。</p>
+  </div>
+  <div class="note">
+    <span class="h">コードを修正したとき</span>
+    <p>保存しただけでは反映されません。「デプロイ」→「デプロイを管理」→ 鉛筆アイコン → バージョン「新バージョン」→「デプロイ」で更新してください。URLは変わりません。</p>
+  </div>
+</section>
+
+<section id="format">
+  <h2>ファイル形式</h2>
+  <p>ほかのツールで復号したいときの参考にしてください。どちらも鍵は PBKDF2-SHA256（パスワード, ソルト, 反復回数）で作る256ビット鍵で、AES-256-GCM で暗号化しています。</p>
+  <h3>メモ（.txt）</h3>
+  <ul>
+    <li>1行目：<code>#kagimemo v1 pbkdf2-sha256 600000 aes-256-gcm</code>（AES-GCM の追加認証データとしても使用）</li>
+    <li>2行目以降：Base64（ソルト16バイト ＋ IV12バイト ＋ 暗号文と認証タグ）。76文字ごとに改行</li>
+  </ul>
+  <h3>写真・動画・任意のファイル（.kgm）</h3>
+  <ul>
+    <li>先頭：<code>KGMB</code> ＋ バージョン1バイト ＋ ヘッダ長（4バイト）＋ ヘッダJSON（反復回数、ソルト、チャンクサイズ4MB、ノンス8バイト）</li>
+    <li>続いて：メタ情報（元のファイル名・種類・サイズ・更新日時）の暗号文の長さ（4バイト）と暗号文</li>
+    <li>残り：本体を4MBずつ暗号化したチャンクの並び（各チャンクに16バイトの認証タグ）</li>
+    <li>IV はノンス ＋ チャンク番号。追加認証データにヘッダ・チャンク番号・最終チャンクかどうかを含めるので、チャンクの入れ替えや切り詰めも検出できます</li>
+  </ul>
+</section>
+
+<footer class="end">
+  <span>鍵メモ ・ Google Apps Script 版 v2</span>
+  <span>開発元：<a href="https://usepocket.com" target="_blank" rel="noopener">usePocket</a></span>
+</footer>
+
+</div>
+
+<script>
+// アクセスカウンター（CGIに届かないときは帯ごと隠す）
+(() => {
+  const box = document.getElementById('access-counter');
+  if (!box) return;
+  const src = box.dataset.src, page = box.dataset.page;
+  if (!src || !page || location.protocol === 'file:') { box.hidden = true; return; }
+  fetch(src + '?page=' + encodeURIComponent(page), { cache: 'no-store' })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(d => {
+      box.querySelectorAll('[data-k]').forEach(el => {
+        const v = Number(d[el.dataset.k]);
+        el.textContent = Number.isFinite(v) ? v.toLocaleString('ja-JP') : '–';
+      });
+    })
+    .catch(() => { box.hidden = true; });
+})();
+</script>
+<script>
+(() => {
+  // コピー: Clipboard API が使えない環境（http配信など）では execCommand にフォールバック
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+  function selectPre(pre) {
+    const r = document.createRange(); r.selectNodeContents(pre);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+  document.querySelectorAll('button.copy').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pre = document.getElementById(btn.dataset.target);
+      const text = pre.textContent;
+      let ok = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = false; }
+      }
+      if (!ok) ok = fallbackCopy(text);
+      if (!ok) selectPre(pre);
+      btn.textContent = ok ? 'コピーしました' : '選択しました';
+      clearTimeout(btn._t);
+      btn._t = setTimeout(() => { btn.textContent = 'コピー'; }, 2000);
+    });
+  });
+  document.querySelectorAll('button.expand').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const box = btn.closest('.codebox');
+      const open = box.classList.toggle('open');
+      btn.textContent = open ? '折りたたむ' : '全体を表示';
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
+})();
+</script>
+</body>
+</html>

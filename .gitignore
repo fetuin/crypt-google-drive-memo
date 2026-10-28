@@ -1,0 +1,6 @@
+# カウンターの記録データ（サーバー上でのみ生成）
+guide-site/counter_data/*.dat
+
+# OSが作るファイル
+.DS_Store
+Thumbs.db
